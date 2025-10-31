@@ -23,7 +23,7 @@ export default function Navbar() {
               Track Your Token
             </Link>
             <Link
-              to="/admin-login"
+              to="/loginoptions"
               className="text-[#333333] hover:text-[#007BFF] transition-colors font-roboto"
             >
               Admin Login
