@@ -1,21 +1,31 @@
 import React, { useState, useEffect, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
-import { db } from "../firebase"; // adjust path if needed
+import { db } from "../firebase";
+import { Calendar, Upload, User, FileText, Phone, AlertCircle } from "lucide-react";
+
+interface Doctor {
+  id: string;
+  name: string;
+  specialization: string;
+  uid: string;
+}
 
 const BookingPage: React.FC = () => {
   const [patientName, setPatientName] = useState("");
   const [patientProblem, setPatientProblem] = useState("");
   const [age, setAge] = useState<number | "">("");
   const [phone, setPhone] = useState("");
-  const [doctor, setDoctor] = useState(""); // new
-  const [doctors, setDoctors] = useState<{ id: string; name: string }[]>([]); // new
+  const [doctorName, setDoctorName] = useState("");
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [tokenInfo, setTokenInfo] = useState<{ token: number; waitTime: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const navigate = useNavigate();
 
-  // 🔹 Fetch all doctors from Firestore
+  // Fetch doctors from Firestore
   useEffect(() => {
     const fetchDoctors = async () => {
       try {
@@ -23,6 +33,8 @@ const BookingPage: React.FC = () => {
         const doctorList = snapshot.docs.map((doc) => ({
           id: doc.id,
           name: doc.data().name || "Unnamed Doctor",
+          specialization: doc.data().specialization || "General",
+          uid: doc.data().uid || "",
         }));
         setDoctors(doctorList);
       } catch (err) {
@@ -32,144 +44,197 @@ const BookingPage: React.FC = () => {
     fetchDoctors();
   }, []);
 
-  // 🔹 Handle booking submission
+  // Estimated wait time = 15 mins * patients ahead
+  const calculateWaitTime = (queuePosition: number) => queuePosition * 15;
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (!patientName || !patientProblem || !age || !phone || !doctor) {
-      setError("Please fill out all fields, including doctor selection.");
+    if (!patientName || !patientProblem || !age || !phone || !doctorName) {
+      setError("Please fill all fields and select a doctor.");
       return;
     }
 
     setIsLoading(true);
     setError(null);
+    setSuccessMessage("");
 
     try {
+      const selectedDoctor = doctors.find((d) => d.name === doctorName);
       const token = Math.floor(1000 + Math.random() * 9000);
+      const waitTime = calculateWaitTime(Math.floor(Math.random() * 5)); // mock queue length
 
-      const docRef = await addDoc(collection(db, "bookings"), {
+      await addDoc(collection(db, "bookings"), {
         patientName,
         patientProblem,
         age,
         phone,
-        doctor, // store doctor name
+        doctorName,
+        doctorId: selectedDoctor?.uid || "",
+        specialization: selectedDoctor?.specialization || "General",
         token,
         status: "Pending",
         createdAt: serverTimestamp(),
       });
 
-      setIsLoading(false);
-      navigate(`/success?token=${token}&name=${encodeURIComponent(patientName)}&id=${docRef.id}`);
+      setTokenInfo({ token, waitTime });
+      setSuccessMessage("Appointment booked successfully!");
+
+      setPatientName("");
+      setPatientProblem("");
+      setAge("");
+      setPhone("");
+      setDoctorName("");
+
+      setTimeout(() => {
+        navigate(`/success?token=${token}&name=${encodeURIComponent(patientName)}`);
+      }, 2000);
     } catch (err) {
       console.error("Booking failed:", err);
-      setIsLoading(false);
       setError("An error occurred. Please try again later.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="container mx-auto max-w-2xl px-4 py-16">
-      <h1 className="text-4xl font-bold text-center text-blue-600 mb-8">
-        Book Your Appointment
-      </h1>
-      <p className="text-center text-gray-600 mb-8">
-        Select your doctor and fill out your details to book an appointment.
-      </p>
-
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-8 rounded-lg shadow-xl border border-gray-100"
-      >
-        {/* Name */}
-        <div className="mb-6">
-          <label className="block text-lg font-medium mb-2">Full Name</label>
-          <input
-            type="text"
-            value={patientName}
-            onChange={(e) => setPatientName(e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-            placeholder="e.g., Jane Doe"
-            disabled={isLoading}
-          />
-        </div>
-
-        {/* Age */}
-        <div className="mb-6">
-          <label className="block text-lg font-medium mb-2">Age</label>
-          <input
-            type="number"
-            value={age}
-            onChange={(e) => setAge(Number(e.target.value))}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-            placeholder="e.g., 28"
-            disabled={isLoading}
-          />
-        </div>
-
-        {/* Phone */}
-        <div className="mb-6">
-          <label className="block text-lg font-medium mb-2">Phone Number</label>
-          <input
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-            placeholder="e.g., +91 9876543210"
-            disabled={isLoading}
-          />
-        </div>
-
-        {/* Doctor Selection */}
-        <div className="mb-6">
-          <label className="block text-lg font-medium mb-2">
-            Which Doctor Would You Like to Consult?
-          </label>
-          <select
-            value={doctor}
-            onChange={(e) => setDoctor(e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-            disabled={isLoading || doctors.length === 0}
-          >
-            <option value="">Select a Doctor</option>
-            {doctors.map((d) => (
-              <option key={d.id} value={d.name}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Problem */}
-        <div className="mb-6">
-          <label className="block text-lg font-medium mb-2">
-            Describe Your Health Problem
-          </label>
-          <textarea
-            value={patientProblem}
-            onChange={(e) => setPatientProblem(e.target.value)}
-            rows={5}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-            placeholder="e.g., I've had a bad headache and fever for two days..."
-            disabled={isLoading}
-          ></textarea>
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg mb-6">
-            {error}
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white rounded-2xl shadow-xl p-8">
+          <div className="flex items-center gap-3 mb-8">
+            <Calendar className="w-8 h-8 text-blue-600" />
+            <h1 className="text-3xl font-bold text-gray-800">Book Appointment</h1>
           </div>
-        )}
 
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="w-full bg-blue-600 text-white font-bold py-3 px-6 rounded-full shadow-lg hover:bg-blue-700 transition disabled:bg-gray-400"
-        >
-          {isLoading ? "Booking, please wait..." : "Book My Appointment"}
-        </button>
-      </form>
+          {/* Success Message */}
+          {successMessage && tokenInfo && (
+            <div className="mb-6 p-6 bg-green-50 border-l-4 border-green-500 rounded-lg">
+              <h3 className="font-semibold text-green-800 text-lg mb-2">{successMessage}</h3>
+              <div className="space-y-1 text-green-700">
+                <p className="text-xl font-bold">Token Number: {tokenInfo.token}</p>
+                <p>Estimated Wait Time: {tokenInfo.waitTime} minutes</p>
+              </div>
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div className="flex items-center gap-2 mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg text-red-700">
+              <AlertCircle className="w-5 h-5" />
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Patient Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Patient Name</label>
+              <div className="relative">
+                <User className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={patientName}
+                  onChange={(e) => setPatientName(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter patient name"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Age and Phone */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Age</label>
+                <input
+                  type="number"
+                  value={age}
+                  onChange={(e) => setAge(Number(e.target.value))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Age"
+                  min="1"
+                  max="120"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="+91 9876543210"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Doctor Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Select Doctor</label>
+              <select
+                value={doctorName}
+                onChange={(e) => setDoctorName(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required
+              >
+                <option value="">Choose a doctor</option>
+                {doctors.map((doctor) => (
+                  <option key={doctor.id} value={doctor.name}>
+                    Dr. {doctor.name} — {doctor.specialization}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Problem Description */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Problem Description
+              </label>
+              <div className="relative">
+                <FileText className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
+                <textarea
+                  value={patientProblem}
+                  onChange={(e) => setPatientProblem(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Describe your problem..."
+                  rows={4}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Upload Past Reports */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Upload Past Reports (Optional)
+              </label>
+              <div className="relative border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors text-center">
+                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                <p className="text-sm text-gray-600">
+                  Click to upload or drag and drop your reports
+                </p>
+                <p className="text-xs text-gray-500 mt-1">PDF, JPG, PNG up to 10MB</p>
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-colors"
+            >
+              {isLoading ? "Booking..." : "Book Appointment"}
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   );
 };

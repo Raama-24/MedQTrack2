@@ -8,15 +8,21 @@ const DoctorLogin: React.FC = () => {
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      navigate("/doctor-dashboard");
-    } catch (error: any) {
-      alert(error.message);
-    }
-  };
+const handleLogin = async (e: React.FormEvent) => {
+  e.preventDefault();
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    // Store UID for later use
+    localStorage.setItem("doctorUID", user.uid);
+
+    navigate("/doctordashboard");
+  } catch (error: any) {
+    alert(error.message);
+  }
+};
+
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
