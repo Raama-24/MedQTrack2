@@ -1,75 +1,75 @@
-import { Link } from 'react-router-dom';
-import { FaUserMd, FaClock, FaHeartbeat } from 'react-icons/fa';
+import { motion } from "framer-motion";
+
+const features = [
+  "Real-time Queue",
+  "Bed Availability",
+  "Smart Dashboards",
+  "Check Token Status",
+];
 
 export default function HeroSection() {
   return (
-    <section className="bg-white py-20">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col lg:flex-row items-center gap-12">
-          <div className="flex-1">
-            <h1 className="text-5xl font-poppins font-bold text-[#333333] mb-4">
-              MedQTrack
-            </h1>
-            <h2 className="text-3xl font-poppins font-semibold text-[#007BFF] mb-6">
-              Smarter, Faster Healthcare. No More Waiting.
-            </h2>
-            <p className="text-lg text-[#333333] font-roboto mb-8 leading-relaxed">
-              Welcome to MedQTrack. Book appointments, check bed availability, and get seen faster.
-            </p>
-            <div className="flex gap-4">
-              <Link
-                to="/book"
-                className="bg-[#007BFF] text-white px-8 py-3 rounded-lg hover:bg-[#0056b3] transition-colors font-roboto font-medium text-lg"
-              >
-                Book Appointment
-              </Link>
-              <Link
-                to="/beds"
-                className="border-2 border-[#007BFF] text-[#007BFF] px-8 py-3 rounded-lg hover:bg-[#007BFF] hover:text-white transition-colors font-roboto font-medium text-lg"
-              >
-                Check Beds
-              </Link>
-            </div>
-          </div>
+    <div className="relative h-[90vh] w-full overflow-hidden">
 
-          <div className="flex-1">
-            <div className="bg-white border-2 border-gray-200 rounded-xl p-8 shadow-lg">
-              <h3 className="text-2xl font-poppins font-bold text-[#333333] mb-6">
-                Why Trust Us?
-              </h3>
-              <div className="space-y-6">
-                <div className="flex items-center gap-4">
-                  <div className="bg-[#007BFF] p-3 rounded-full">
-                    <FaHeartbeat className="text-white text-2xl" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-poppins font-bold text-[#333333]">1000+</p>
-                    <p className="text-[#333333] font-roboto">Lives Saved</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="bg-[#007BFF] p-3 rounded-full">
-                    <FaClock className="text-white text-2xl" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-poppins font-bold text-[#333333]">24/7</p>
-                    <p className="text-[#333333] font-roboto">Service Available</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="bg-[#007BFF] p-3 rounded-full">
-                    <FaUserMd className="text-white text-2xl" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-poppins font-bold text-[#333333]">50+</p>
-                    <p className="text-[#333333] font-roboto">Specialist Doctors</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+      {/* Background */}
+      <div
+        className="absolute -inset-[0.5%] bg-cover bg-bottom"
+        style={{ backgroundImage: "url('/bg3.png')" }}
+      />
+
+      {/* Content */}
+      <div className="relative z-10 flex h-full items-center px-12 md:px-20">
+        <div className="max-w-4xl">
+
+          {/* Title */}
+          <motion.h1
+            initial={{ opacity: 0, y: -220, z: -600, letterSpacing: "-0.5em" }}
+            animate={{ opacity: 1, y: 0, z: 0, letterSpacing: "0em" }}
+            transition={{ duration: 2.0, ease: [0.215, 0.61, 0.355, 1] }} // SLOWER
+            className="text-6xl md:text-8xl font-bold text-white tracking-tight"
+            style={{ textShadow: "0 10px 30px rgba(0,0,0,0.5)", transformPerspective: 1000 }}
+          >
+            Med<span className="text-blue-400">Q</span>Track
+          </motion.h1>
+
+          {/* Subtitle */}
+          <motion.p
+            initial={{ opacity: 0, y: 160, z: -500, letterSpacing: "-0.4em" }}
+            animate={{ opacity: 1, y: 0, z: 0, letterSpacing: "0em" }}
+            transition={{ delay: 2.2, duration: 1.5, ease: [0.215, 0.61, 0.355, 1] }} // SLOWER & delayed
+            className="mt-6 text-2xl md:text-3xl lg:text-4xl font-medium text-white whitespace-nowrap leading-tight"
+            style={{ transformPerspective: 1000 }}
+          >
+            Healthcare Operations, Done Right
+          </motion.p>
+
+          {/* Features */}
+          <motion.ul
+            className="mt-16 flex flex-wrap items-center gap-6"
+            initial="hidden"
+            animate="visible"
+            variants={{
+              visible: { transition: { staggerChildren: 0.5, delayChildren: 4.0 } }, // SLOWER
+            }}
+          >
+            {features.map((feature) => (
+              <motion.li
+                key={feature}
+                className="flex items-center gap-2 text-white/90"
+                variants={{
+                  hidden: { opacity: 0, letterSpacing: "1em" },
+                  visible: { opacity: 1, letterSpacing: "0em" },
+                }}
+                transition={{ duration: 1.0, ease: [0.215, 0.61, 0.355, 1] }} // SLOWER
+              >
+                <span className="h-2.5 w-2.5 rounded-full bg-blue-400" />
+                <span className="text-base md:text-lg whitespace-nowrap">{feature}</span>
+              </motion.li>
+            ))}
+          </motion.ul>
+
         </div>
       </div>
-    </section>
+    </div>
   );
 }
