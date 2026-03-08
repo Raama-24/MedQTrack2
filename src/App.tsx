@@ -8,20 +8,21 @@ import Signup from "./pages/Signup";
 import DoctorDashboard from './pages/DoctorDashboard';
 import TrackToken from './pages/TrackToken';
 
+import BedAvailability from './pages/BedAvailability';
 
 function App() {
   return (
     <Router>
       <Routes>
         <Route path="/" element={<HomePage />} />
-          <Route path="/loginoptions" element={<LoginOptions />} />
-            <Route path="/doctorlogin" element={<DoctorLogin role="doctor" />} />
-            <Route path="/doctordashboard" element={< DoctorDashboard />}/>
-            <Route path="/signup" element={<Signup />} />
-        <Route path="/beds" element={<div className="min-h-screen flex items-center justify-center"><p className="text-2xl">Bed Availability Page</p></div>} />
+        <Route path="/loginoptions" element={<LoginOptions />} />
+        <Route path="/doctorlogin" element={<DoctorLogin role="doctor" />} />
+        <Route path="/doctordashboard" element={< DoctorDashboard />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/beds" element={<BedAvailability />} />
         <Route path="/track" element={<TrackToken />} />
-<Route path="/success" element={<SuccessPage />} />
-
+        <Route path="/success" element={<SuccessPage />} />
+        <Route path="/book" element={<BookingPage />} />
         <Route path="/admin-login" element={<div className="min-h-screen flex items-center justify-center"><p className="text-2xl">Admin Login Page</p></div>} />
       </Routes>
     </Router>
