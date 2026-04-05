@@ -63,11 +63,14 @@ async function sendWhatsAppMessage(to, text) {
                 type: "text",
                 text: { body: text },
             },
+
         });
     } catch (error) {
         console.error("Error sending WA message:", error?.response?.data || error.message);
     }
 }
+console.log("WHATSAPP_TOKEN:", !!WHATSAPP_TOKEN);
+console.log("PHONE_NUMBER_ID:", PHONE_NUMBER_ID);
 
 // ==========================================
 // Webhook Verification (WhatsApp required)
