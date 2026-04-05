@@ -1,6 +1,6 @@
 import React, { useState, useEffect, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { Calendar, Upload, User, FileText, Phone, AlertCircle } from "lucide-react";
 
@@ -22,6 +22,7 @@ const BookingPage: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState("");
   const [tokenInfo, setTokenInfo] = useState<{ token: number; waitTime: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
 
   const navigate = useNavigate();
 
@@ -44,9 +45,6 @@ const BookingPage: React.FC = () => {
     fetchDoctors();
   }, []);
 
-  // Estimated wait time = 15 mins * patients ahead
-  const calculateWaitTime = (queuePosition: number) => queuePosition * 15;
-
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -61,23 +59,32 @@ const BookingPage: React.FC = () => {
 
     try {
       const selectedDoctor = doctors.find((d) => d.name === doctorName);
-      const token = Math.floor(1000 + Math.random() * 9000);
-      const waitTime = calculateWaitTime(Math.floor(Math.random() * 5)); // mock queue length
 
-      await addDoc(collection(db, "bookings"), {
-        patientName,
-        patientProblem,
-        age,
-        phone,
-        doctorName,
-        doctorId: selectedDoctor?.uid || "",
-        specialization: selectedDoctor?.specialization || "General",
-        token,
-        status: "Pending",
-        createdAt: serverTimestamp(),
+      const formData = new FormData();
+      formData.append("patientName", patientName);
+      formData.append("patientProblem", patientProblem);
+      formData.append("age", age.toString());
+      formData.append("phone", phone);
+      formData.append("doctorName", doctorName);
+      formData.append("doctorId", selectedDoctor?.uid || "");
+      formData.append("specialization", selectedDoctor?.specialization || "General");
+
+      if (file) {
+        formData.append("file", file);
+      }
+
+      const response = await fetch("http://localhost:3000/api/book-with-ai", {
+        method: "POST",
+        body: formData,
       });
 
-      setTokenInfo({ token, waitTime });
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error || "Booking failed");
+      }
+
+      setTokenInfo({ token: result.token, waitTime: result.waitTime });
       setSuccessMessage("Appointment booked successfully!");
 
       setPatientName("");
@@ -85,13 +92,14 @@ const BookingPage: React.FC = () => {
       setAge("");
       setPhone("");
       setDoctorName("");
+      setFile(null);
 
       setTimeout(() => {
-        navigate(`/success?token=${token}&name=${encodeURIComponent(patientName)}`);
+        navigate(`/success?token=${result.token}&name=${encodeURIComponent(patientName)}`);
       }, 2000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Booking failed:", err);
-      setError("An error occurred. Please try again later.");
+      setError(err.message || "An error occurred. Please try again later.");
     } finally {
       setIsLoading(false);
     }
@@ -215,13 +223,19 @@ const BookingPage: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Upload Past Reports (Optional)
               </label>
-              <div className="relative border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors text-center">
+              <label className="relative border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-blue-400 transition-colors text-center cursor-pointer block">
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
                 <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                 <p className="text-sm text-gray-600">
-                  Click to upload or drag and drop your reports
+                  {file ? file.name : "Click to upload or drag and drop your reports"}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">PDF, JPG, PNG up to 10MB</p>
-              </div>
+                <p className="text-xs text-gray-500 mt-1">PDF up to 10MB</p>
+              </label>
             </div>
 
             {/* Submit Button */}

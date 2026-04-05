@@ -1,13 +1,16 @@
+console.log("RUNNING CORRECT SERVER FILE ✅");
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 const admin = require('firebase-admin');
-
+const multer = require('multer');
+const pdf = require('pdf-parse');
+const { Groq } = require('groq-sdk');
+const cors = require('cors');
+const Tesseract = require("tesseract.js");
 // 1. Initialize Firebase Admin
-// Important: Download your Firebase Service Account JSON from the Firebase Console 
-// (Project Settings > Service Accounts > Generate new private key)
-// and save it as "serviceAccountKey.json" inside this server folder.
+
 try {
     const serviceAccount = require('./serviceAccountKey.json');
     admin.initializeApp({
@@ -23,7 +26,25 @@ try {
 const db = admin.firestore?.() || null;
 
 const app = express();
+app.get("/test", (req, res) => {
+    res.send("TEST WORKING ✅");
+});
+app.get("/api/book-with-ai", (req, res) => {
+    console.log("GET API HIT ✅");
+    res.send("API reachable ✅");
+});
+// Allow CORS for development
+app.use(cors());
 app.use(bodyParser.json());
+
+// Initialize Groq
+const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY,
+});
+
+// Configure Multer
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 
 // Environment variables
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
@@ -69,8 +90,7 @@ async function sendWhatsAppMessage(to, text) {
         console.error("Error sending WA message:", error?.response?.data || error.message);
     }
 }
-console.log("WHATSAPP_TOKEN:", !!WHATSAPP_TOKEN);
-console.log("PHONE_NUMBER_ID:", PHONE_NUMBER_ID);
+
 
 // ==========================================
 // Webhook Verification (WhatsApp required)
@@ -258,6 +278,133 @@ async function finalizeAppointment(userPhone, data) {
     const msg = `✅ *Success!*\nYour appointment is booked with ${data.doctorName}.\n\n*Name:* ${data.name}\n*Token no:* ${tokenNumber}\n*Expected wait time:* ~30 minutes.\n\nPlease show this message at the reception counter.`;
     await sendWhatsAppMessage(userPhone, msg);
 }
+
+// ==========================================
+// AI Medical Report Summarizer & Booking
+// ==========================================
+app.post("/api/book-with-ai", upload.single('file'), async (req, res) => {
+    console.log("BOOK API HIT ✅");
+
+    try {
+        const {
+            patientName,
+            patientProblem,
+            age,
+            phone,
+            doctorName,
+            doctorId,
+            specialization
+        } = req.body;
+
+        let aiSummary = "No report provided.";
+
+        // ✅ SAFE PDF PARSING
+        if (req.file) {
+            const isPDF = req.file.originalname.toLowerCase().endsWith(".pdf");
+            const isImage = req.file.mimetype.startsWith("image/");
+
+            if (!isPDF && !isImage) {
+                throw new Error("Only PDF or image files allowed");
+            }
+            try {
+                let reportText = "";
+
+                // 🟢 IMAGE → Direct OCR
+                if (isImage) {
+                    console.log("🖼️ Image detected → Running OCR...");
+
+                    const result = await Tesseract.recognize(
+                        req.file.buffer,
+                        "eng",
+                        { logger: m => console.log(m) }
+                    );
+
+                    reportText = result.data.text;
+                }
+
+                // 🔵 PDF → Try parse → fallback OCR (if you still want PDF support)
+                if (isPDF) {
+                    console.log("📄 PDF detected");
+
+                    try {
+                        const data = await pdf(req.file.buffer);
+                        reportText = data.text;
+                        console.log("PDF text length:", reportText.length);
+                    } catch (err) {
+                        console.log("pdf-parse failed");
+                    }
+
+                    // If empty → skip or later add conversion logic
+                    if (!reportText || reportText.trim().length < 20) {
+                        throw new Error("Scanned PDF not supported yet. Upload image instead.");
+                    }
+                }
+
+                // ❌ If still empty
+                if (!reportText || reportText.trim().length < 20) {
+                    throw new Error("No readable text found");
+                }
+
+                // 🤖 Send to Groq
+                const completion = await groq.chat.completions.create({
+                    messages: [
+                        {
+                            role: "system",
+                            content: "You are a senior medical consultant. Summarize the medical report with key abnormalities and important findings in a clear, structured way."
+                        },
+                        {
+                            role: "user",
+                            content: reportText
+                        }
+                    ],
+                    model: "llama-3.3-70b-versatile",
+                });
+
+                aiSummary = completion.choices[0]?.message?.content || "Failed to generate summary."; aiSummary = completion.choices[0]?.message?.content || "Failed to generate summary.";
+
+            } catch (err) {
+                console.error(err.message);
+                aiSummary = `⚠️ ${err.message}`;
+            }
+        }
+
+        // ✅ TOKEN + WAIT TIME
+        const token = Math.floor(1000 + Math.random() * 9000);
+        const waitTime = Math.floor(Math.random() * 5) * 15;
+
+        // ✅ SAVE TO FIRESTORE
+        if (db) {
+            await db.collection("bookings").add({
+                patientName,
+                patientProblem,
+                age: parseInt(age),
+                phone,
+                doctorName,
+                doctorId,
+                specialization,
+                token,
+                aiSummary,
+                status: "Pending",
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+        }
+
+        // ✅ RESPONSE
+        res.status(200).json({
+            success: true,
+            token,
+            waitTime,
+            aiSummary
+        });
+
+    } catch (error) {
+        console.error("AI Booking Error:", error);
+        res.status(500).json({
+            success: false,
+            error: error.message || "Server error"
+        });
+    }
+});
 
 // ==========================================
 // Server Bootup

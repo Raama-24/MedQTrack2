@@ -30,6 +30,7 @@ interface Booking {
   age: number;
   phone: string;
   status?: "pending" | "in_consultation" | "completed";
+  aiSummary?: string;
 }
 
 interface DoctorEvent {
@@ -46,6 +47,7 @@ const DoctorDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState<DoctorEvent[]>([]);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedSummary, setSelectedSummary] = useState<string | null>(null);
   const doctorUID = localStorage.getItem("doctorUID");
 
   useEffect(() => {
@@ -298,6 +300,7 @@ const DoctorDashboard: React.FC = () => {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wait (mins)</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Summary</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
@@ -317,6 +320,14 @@ const DoctorDashboard: React.FC = () => {
                                 {getStatusIcon(patient.status)}
                                 {(patient.status || "pending").replace("_", " ").toUpperCase()}
                               </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <button
+                                onClick={() => setSelectedSummary(patient.aiSummary || "No report provided or summary not available.")}
+                                className="px-3 py-1 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-md font-medium transition-colors"
+                              >
+                                View
+                              </button>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
                               <select
@@ -340,7 +351,7 @@ const DoctorDashboard: React.FC = () => {
           </div>
 
           {/* Right: Calendar (fixed to right of queue table) */}
-        <div className="bg-white rounded-2xl shadow-lg p-4 h-fit  shrink-0 ">
+          <div className="bg-white rounded-2xl shadow-lg p-4 h-fit  shrink-0 ">
 
             <h3 className="text-xl font-bold text-gray-800 mb-3">Schedule Calendar</h3>
 
@@ -409,6 +420,36 @@ const DoctorDashboard: React.FC = () => {
           </div>
         </div>
       </div> {/* container */}
+
+      {/* Summary Modal */}
+      {selectedSummary !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-gray-800">AI Medical Summary</h3>
+              <button
+                onClick={() => setSelectedSummary(null)}
+                className="text-gray-400 hover:text-gray-600 focus:outline-none"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto whitespace-pre-wrap text-gray-700 leading-relaxed">
+              {selectedSummary}
+            </div>
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end">
+              <button
+                onClick={() => setSelectedSummary(null)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
