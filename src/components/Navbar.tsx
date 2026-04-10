@@ -11,10 +11,10 @@ export default function Navbar() {
 
           <div className="flex items-center gap-6">
             <Link
-              to="/beds"
+              to="/hospitals"
               className="text-[#333333] hover:text-[#007BFF] transition-colors font-roboto"
             >
-              Check Bed Availability
+              View Hospitals
             </Link>
             <Link
               to="/track"
@@ -26,7 +26,7 @@ export default function Navbar() {
               to="/loginoptions"
               className="text-[#333333] hover:text-[#007BFF] transition-colors font-roboto"
             >
-              Admin Login
+              Login
             </Link>
             <Link
               to="/book"

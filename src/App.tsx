@@ -7,6 +7,8 @@ import DoctorLogin from "./pages/DoctorLogin";
 import Signup from "./pages/Signup";
 import DoctorDashboard from './pages/DoctorDashboard';
 import TrackToken from './pages/TrackToken';
+import HospitalList from './pages/HospitalList';
+import HospitalDetail from './pages/HospitalDetail';
 
 import BedAvailability from './pages/BedAvailability';
 
@@ -15,15 +17,16 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/hospitals" element={<HospitalList />} />
+        <Route path="/hospital/:id" element={<HospitalDetail />} />
         <Route path="/loginoptions" element={<LoginOptions />} />
-        <Route path="/doctorlogin" element={<DoctorLogin role="doctor" />} />
+        <Route path="/doctorlogin" element={<DoctorLogin />} />
         <Route path="/doctordashboard" element={< DoctorDashboard />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/beds" element={<BedAvailability />} />
         <Route path="/track" element={<TrackToken />} />
         <Route path="/success" element={<SuccessPage />} />
         <Route path="/book" element={<BookingPage />} />
-        <Route path="/admin-login" element={<div className="min-h-screen flex items-center justify-center"><p className="text-2xl">Admin Login Page</p></div>} />
       </Routes>
     </Router>
   );

@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import VoiceTriage from "./VoiceTriage";
 
 const features = [
   "Real-time Queue",
@@ -67,6 +68,22 @@ export default function HeroSection() {
               </motion.li>
             ))}
           </motion.ul>
+
+          {/* Voice Triage Button and Shortcut */}
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 5.5, duration: 1.0 }}
+            className="mt-16 flex flex-col items-start gap-4"
+          >
+            <VoiceTriage />
+            <p className="text-white/60 text-sm font-medium tracking-wide animate-pulse">
+              Press <kbd className="bg-white/10 px-2 py-1 rounded border border-white/20 text-white">Alt + V</kbd> to start voice triage.
+            </p>
+          </motion.div>
+
+
+
 
         </div>
       </div>
