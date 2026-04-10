@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { db } from "../firebase";
 import {
   collection,
@@ -18,6 +18,11 @@ import {
   CheckCircle,
   AlertCircle,
   Hourglass,
+  Mic,
+  Smartphone,
+  Volume2,
+  MessageSquare,
+  FileText
 } from "lucide-react";
 import Calendar from "react-calendar";
 import "react-calendar/dist/Calendar.css";
@@ -46,8 +51,14 @@ const DoctorDashboard: React.FC = () => {
   const [queue, setQueue] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState<DoctorEvent[]>([]);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<any>(new Date());
   const [selectedSummary, setSelectedSummary] = useState<string | null>(null);
+  const [triageState, setTriageState] = useState<{ patientId: string, status: "recording" | "transcribing" | "generating" | "ready" | "sending", tag: string, name: string, phone: string, summary: string } | null>(null);
+  const [selectedFormat, setSelectedFormat] = useState<"audio" | "text">("text");
+  
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
   const doctorUID = localStorage.getItem("doctorUID");
 
   useEffect(() => {
@@ -107,6 +118,118 @@ const DoctorDashboard: React.FC = () => {
     setQueue((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status: newStatus as any } : item))
     );
+  };
+
+  const getAccessibilityTag = (index: number) => {
+    if (index === 0) return "Deaf";
+    if (index === 1) return "Blind";
+    if (index === 3) return "Deaf";
+    return "None";
+  };
+
+  const handleVoiceTriage = async (patient: Booking, tag: string) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        
+        // Ensure UI cycles through states
+        setTriageState(prev => prev ? { ...prev, status: "transcribing" } : null);
+        
+        // Move to generating partway through if fetch takes time
+        const genTimeout = setTimeout(() => {
+            setTriageState(prev => prev?.status === "transcribing" ? { ...prev, status: "generating" } : prev);
+        }, 3000);
+
+        try {
+          const formData = new FormData();
+          formData.append("audio", audioBlob, "recording.webm");
+          formData.append("patientId", patient.id);
+
+          const res = await fetch("http://localhost:3000/api/voice-triage-process", {
+            method: "POST",
+            body: formData
+          });
+
+          clearTimeout(genTimeout);
+          setTriageState(prev => prev ? { ...prev, status: "generating" } : null); // Make sure it visits generating
+
+          const data = await res.json();
+          if (data.success) {
+            setTimeout(() => {
+                setTriageState(prev => prev ? { ...prev, status: "ready", summary: data.summary } : null);
+            }, 1000); // brief pause to see generating
+          } else {
+             alert("Error processing audio: " + data.error);
+             setTriageState(null);
+          }
+
+        } catch (err) {
+            console.error(err);
+            alert("Network error processing audio.");
+            setTriageState(null);
+        }
+        
+        // Cleanup stream
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setTriageState({ patientId: patient.id, status: "recording", tag, name: patient.patientName, phone: patient.phone, summary: "" });
+      setSelectedFormat(tag === "Blind" ? "audio" : "text");
+
+    } catch (err) {
+      console.error("Mic access denied", err);
+      alert("Microphone access is required.");
+    }
+  };
+
+  const stopVoiceTriage = () => {
+     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+         mediaRecorderRef.current.stop();
+     }
+  };
+
+  const sendSummary = async () => {
+    if (triageState && triageState.summary) {
+      setTriageState(prev => prev ? { ...prev, status: "sending" } : null);
+      
+      try {
+        const res = await fetch("http://localhost:3000/api/voice-triage-send", {
+             method: "POST",
+             headers: { "Content-Type": "application/json" },
+             body: JSON.stringify({
+                 summary: triageState.summary,
+                 format: selectedFormat,
+                 patientPhone: triageState.phone,
+                 patientName: triageState.name
+             })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+             alert("✅ Message sent successfully to WhatsApp!");
+             setTriageState(null);
+        } else {
+             alert("Failed to send: " + data.error);
+             setTriageState(prev => prev ? { ...prev, status: "ready" } : null);
+        }
+      } catch (err) {
+          console.error(err);
+          alert("Network error sending summary");
+          setTriageState(prev => prev ? { ...prev, status: "ready" } : null);
+      }
+    }
   };
 
   // Calendar helpers
@@ -297,24 +420,32 @@ const DoctorDashboard: React.FC = () => {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient Name</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Problem</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wait (mins)</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Accessibility</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Summary</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Voice Triage</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {queue.map((patient, index) => {
                         const estimatedWait = index * avgConsultTime;
+                        const tag = getAccessibilityTag(index);
                         return (
                           <tr key={patient.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap font-bold text-blue-600">#{patient.token}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-gray-800">{patient.patientName}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-gray-600">{patient.patientProblem}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-gray-600">{patient.age}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-gray-600">{patient.phone}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-gray-800 font-semibold">{estimatedWait}</td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {tag !== "None" ? (
+                                <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${tag === 'Deaf' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
+                                  {tag === 'Deaf' ? <MessageSquare className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+                                  {tag}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 text-sm">None</span>
+                              )}
+                            </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(patient.status)}`}>
                                 {getStatusIcon(patient.status)}
@@ -323,10 +454,10 @@ const DoctorDashboard: React.FC = () => {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
                               <button
-                                onClick={() => setSelectedSummary(patient.aiSummary || "No report provided or summary not available.")}
-                                className="px-3 py-1 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 rounded-md font-medium transition-colors"
+                                onClick={() => handleVoiceTriage(patient, tag)}
+                                className="flex items-center gap-2 px-3 py-2 bg-[#007BFF] text-white rounded-lg hover:bg-[#0056b3] font-medium transition-colors shadow-sm"
                               >
-                                View
+                                <Mic className="w-4 h-4" /> Start Voice Triage
                               </button>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
@@ -421,7 +552,7 @@ const DoctorDashboard: React.FC = () => {
         </div>
       </div> {/* container */}
 
-      {/* Summary Modal */}
+      {/* Summary Modal (Original) */}
       {selectedSummary !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
@@ -447,6 +578,111 @@ const DoctorDashboard: React.FC = () => {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Voice Triage Processing Modal */}
+      {triageState !== null && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl flex flex-col items-center text-center">
+            
+            {triageState.status === "recording" && (
+              <>
+                <div className="w-24 h-24 rounded-full bg-red-100 flex items-center justify-center mb-6 animate-pulse">
+                  <Mic className="w-12 h-12 text-red-600 animate-bounce" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Recording Consultation</h3>
+                <p className="text-gray-500 mb-8">Speak clearly into your microphone...</p>
+                <button
+                  onClick={stopVoiceTriage}
+                  className="w-full py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-lg transition-all flex justify-center items-center shadow-lg hover:scale-105"
+                >
+                  Stop Voice Triage
+                </button>
+              </>
+            )}
+
+            {triageState.status === "transcribing" && (
+              <>
+                <div className="w-20 h-20 rounded-full bg-blue-100 flex items-center justify-center mb-6 animate-pulse">
+                  <Mic className="w-10 h-10 text-blue-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Transcribing Voice</h3>
+                <p className="text-gray-500">Whisper AI is understanding the consultation...</p>
+              </>
+            )}
+
+            {triageState.status === "generating" && (
+              <>
+                <div className="w-20 h-20 rounded-full bg-indigo-100 flex items-center justify-center mb-6 animate-spin">
+                  <FileText className="w-10 h-10 text-indigo-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Generating Summary</h3>
+                <p className="text-gray-500">Llama-3 is creating structured insights...</p>
+              </>
+            )}
+            
+            {triageState.status === "sending" && (
+              <>
+                <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mb-6 animate-pulse">
+                  <Smartphone className="w-10 h-10 text-green-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">Sending Protocol Active</h3>
+                <p className="text-gray-500">Dispatching via WhatsApp Cloud API...</p>
+              </>
+            )}
+
+            {triageState.status === "ready" && (
+              <>
+                <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                  <CheckCircle className="w-10 h-10 text-green-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">Summary Ready!</h3>
+                
+                <div className="bg-gray-50 w-full p-4 rounded-xl border border-gray-200 mb-4 text-left max-h-[250px] overflow-y-auto">
+                    <p className="text-sm font-semibold text-gray-500 uppercase mb-2">Generated by Llama-3:</p>
+                    <div className="text-sm text-gray-800 whitespace-pre-wrap">
+                        {triageState.summary}
+                    </div>
+                </div>
+
+                <div className="w-full flex items-center justify-center gap-4 mb-6">
+                    <button 
+                        onClick={() => setSelectedFormat("text")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium border-2 transition-all ${selectedFormat === "text" ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                    >
+                        <MessageSquare className="w-4 h-4" /> Text
+                    </button>
+                    <button 
+                        onClick={() => setSelectedFormat("audio")}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium border-2 transition-all ${selectedFormat === "audio" ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                    >
+                        <Volume2 className="w-4 h-4" /> Audio (TTS)
+                    </button>
+                    <div className="ml-auto flex flex-col text-right">
+                        <span className="text-xs text-gray-500">Suggested:</span>
+                        <span className="text-sm font-bold text-gray-800">{triageState.tag === "Blind" ? "Audio" : triageState.tag === "Deaf" ? "Text" : "Text"}</span>
+                    </div>
+                </div>
+
+                <button
+                  onClick={sendSummary}
+                  className="w-full py-3 bg-[#25D366] hover:bg-[#1ebd5a] text-white rounded-xl font-bold text-lg transition-all flex justify-center items-center gap-2 shadow-lg hover:shadow-[#25D366]/30 hover:scale-105"
+                >
+                  <Smartphone className="w-5 h-5" /> Send Summary via WhatsApp
+                </button>
+              </>
+            )}
+            
+            {triageState.status !== "recording" && triageState.status !== "sending" && (
+                <button 
+                   onClick={() => setTriageState(null)}
+                   className="absolute top-4 right-4 text-gray-400 hover:text-gray-800 transition-colors"
+                >
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            )}
           </div>
         </div>
       )}

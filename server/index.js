@@ -9,6 +9,10 @@ const pdf = require('pdf-parse');
 const { Groq } = require('groq-sdk');
 const cors = require('cors');
 const Tesseract = require("tesseract.js");
+const fs = require('fs');
+const path = require('path');
+const FormData = require('form-data');
+const { exec } = require('child_process');
 // 1. Initialize Firebase Admin
 
 try {
@@ -54,6 +58,19 @@ const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_ID;
 // Conversation In-Memory State Mapping
 // Map struct: { "phone_number": { step: "string", data: { name: "", age: "", ... } } }
 const sessions = {};
+
+// Helper to run shell commands via promises
+const runCommand = (cmd) => new Promise((resolve, reject) => {
+    exec(cmd, (error, stdout, stderr) => {
+        if (error) {
+            console.error(stderr);
+            reject(error);
+        } else {
+            resolve(stdout);
+        }
+    });
+});
+
 async function getDoctorsFromDB() {
     if (!db) return [];
     const snapshot = await db.collection("doctors").get();
@@ -86,8 +103,15 @@ async function sendWhatsAppMessage(to, text) {
             },
 
         });
+        console.log(`✅ Text Message Successfully Sent to ${to}`);
     } catch (error) {
-        console.error("Error sending WA message:", error?.response?.data || error.message);
+        console.error("❌ WhatsApp Send Error:", error?.response?.data || error.message);
+        const metaError = error?.response?.data?.error;
+        if (metaError) {
+            console.error("Meta Error:", JSON.stringify(metaError, null, 2));
+            throw new Error(`WhatsApp API Error: ${metaError.message} (Code: ${metaError.code})`);
+        }
+        throw error;
     }
 }
 
@@ -403,6 +427,155 @@ app.post("/api/book-with-ai", upload.single('file'), async (req, res) => {
             success: false,
             error: error.message || "Server error"
         });
+    }
+});
+
+// ==========================================
+// Voice Triage Workflow
+// ==========================================
+app.post("/api/voice-triage-process", upload.single('audio'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: "No audio file provided" });
+        }
+
+        const tempFilePath = path.join(__dirname, `temp_${Date.now()}.webm`);
+        fs.writeFileSync(tempFilePath, req.file.buffer);
+
+        // 1. STT via Groq Whisper
+        const transcription = await groq.audio.transcriptions.create({
+            file: fs.createReadStream(tempFilePath),
+            model: "whisper-large-v3",
+        });
+        const transcriptText = transcription.text;
+        
+        // Clean up
+        fs.unlinkSync(tempFilePath);
+
+        if (!transcriptText) throw new Error("No transcription generated");
+
+        // 2. LLM Summarization via Groq Llama 3
+        const completion = await groq.chat.completions.create({
+            messages: [
+                {
+                    role: "system",
+                    content: "You are a professional medical assistant. Create a structured, patient-friendly summary of the doctor's consultation in concise bullet points. Use simple, non-technical language. Do not add any assumptions outside of the transcript. Do NOT include introductory phrases, just output the bullet points."
+                },
+                {
+                    role: "user",
+                    content: transcriptText
+                }
+            ],
+            model: "llama-3.3-70b-versatile",
+        });
+
+        const summary = completion.choices[0]?.message?.content || "Failed to generate summary.";
+
+        res.status(200).json({
+            success: true,
+            transcript: transcriptText,
+            summary: summary
+        });
+
+    } catch (err) {
+        console.error("Voice Triage Process Error:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post("/api/voice-triage-send", async (req, res) => {
+    try {
+        const { summary, format, patientPhone, patientName } = req.body;
+        
+        let targetPhone = patientPhone ? String(patientPhone).replace(/\D/g, '') : "";
+        
+        // WhatsApp requires country code. If 10 digits, prepend 91 (India)
+        if (targetPhone.length === 10) {
+            targetPhone = "91" + targetPhone; 
+        }
+
+        if (format === "audio") {
+            // 1. Generate Conversational Text
+            const completion = await groq.chat.completions.create({
+                messages: [
+                    {
+                        role: "system",
+                        content: "You are a medical assistant. Convert the following medical summary into natural conversational sentences. Avoid bullet points, abbreviations, and symbols. Start exactly with: 'Hello, here is your medical summary.'"
+                    },
+                    {
+                        role: "user",
+                        content: summary
+                    }
+                ],
+                model: "llama-3.3-70b-versatile",
+            });
+            const conversationalText = completion.choices[0]?.message?.content || `Hello, here is your medical summary. ${summary}`;
+
+            // 2. Generate Audio using Python gTTS
+            const tempTxtPath = path.join(__dirname, `temp_${Date.now()}.txt`);
+            const tempMp3Path = path.join(__dirname, `summary_${Date.now()}.mp3`);
+            
+            fs.writeFileSync(tempTxtPath, conversationalText);
+            
+            await runCommand(`python gtts_script.py "${tempTxtPath}" "${tempMp3Path}"`);
+            
+            const audioBuffer = fs.readFileSync(tempMp3Path);
+
+            // Cleanup
+            fs.unlinkSync(tempTxtPath);
+            fs.unlinkSync(tempMp3Path);
+            
+            // 3. Upload to WA Media API
+            const mediaForm = new FormData();
+            mediaForm.append('file', audioBuffer, { filename: 'summary.mp3', contentType: 'audio/mpeg' });
+            mediaForm.append('type', 'audio');
+            mediaForm.append('messaging_product', 'whatsapp');
+
+            let mediaId = null;
+            try {
+                if (WHATSAPP_TOKEN && PHONE_NUMBER_ID) {
+                    const uploadRes = await axios.post(`https://graph.facebook.com/v17.0/${PHONE_NUMBER_ID}/media`, mediaForm, {
+                        headers: {
+                            ...mediaForm.getHeaders(),
+                            Authorization: `Bearer ${WHATSAPP_TOKEN}`
+                        }
+                    });
+                    mediaId = uploadRes.data.id;
+                }
+            } catch(waErr) {
+                console.error("❌ Media Upload Error:", waErr.response?.data || waErr.message);
+                if (waErr.response?.data) {
+                    console.error("Meta Detail:", JSON.stringify(waErr.response.data.error, null, 2));
+                }
+            }
+
+            // 4. Send Media Message
+            if (mediaId && WHATSAPP_TOKEN) {
+                 const response = await axios.post(`https://graph.facebook.com/v17.0/${PHONE_NUMBER_ID}/messages`, {
+                    messaging_product: "whatsapp",
+                    to: targetPhone,
+                    type: "audio",
+                    audio: { id: mediaId },
+                }, { headers: { Authorization: `Bearer ${WHATSAPP_TOKEN}` } });
+                 console.log(`✅ Audio Message Successfully Sent to ${targetPhone} (Meta ID: ${response.data.messages[0].id})`);
+            } else {
+                 throw new Error("Media ID not generated or WhatsApp token missing");
+            }
+            
+        } else {
+            // Text Message
+            const msg = `*Medical Summary for ${patientName || "Patient"}*\n\n${summary}`;
+            if (WHATSAPP_TOKEN && PHONE_NUMBER_ID && targetPhone) {
+                await sendWhatsAppMessage(targetPhone, msg);
+            } else {
+                throw new Error("WhatsApp Credentials (Token/ID) missing in .env");
+            }
+        }
+
+        res.status(200).json({ success: true });
+    } catch (err) {
+        console.error("Voice Triage Send Error:", err);
+         res.status(500).json({ success: false, error: err.message });
     }
 });
 
