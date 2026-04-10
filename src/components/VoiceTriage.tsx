@@ -32,6 +32,7 @@ export default function VoiceTriage() {
     name: '',
     age: '',
     gender: '',
+    phone: '',
     doctorName: '',
     doctorId: '',
     specialization: '',
@@ -189,12 +190,23 @@ export default function VoiceTriage() {
 
       setCapturedData(prev => ({ ...prev, age, gender }));
       setStep(3);
-      speak("Great. Which doctor do you want to see? For example, Dr. Vipul Jain.", () => {
+      speak("Got it. Now, please tell me your phone number.", () => {
         if (listenRef.current) listenRef.current();
       });
     }
     else if (currentStep === 3) {
-      // Step 3: Captured Doctor
+      // Step 3: Captured Phone
+      const phoneDigits = text.replace(/\D/g, '');
+      const phone = phoneDigits.length > 5 ? phoneDigits : text;
+
+      setCapturedData(prev => ({ ...prev, phone }));
+      setStep(4);
+      speak("Great. Which doctor do you want to see? For example, Dr. Vipul Jain.", () => {
+        if (listenRef.current) listenRef.current();
+      });
+    }
+    else if (currentStep === 4) {
+      // Step 4: Captured Doctor
       let matchedDoctor = currentDoctors.find(d => lowerText.includes(d.name.toLowerCase()));
 
       if (!matchedDoctor && currentDoctors.length > 0) {
@@ -208,15 +220,15 @@ export default function VoiceTriage() {
         doctorId: matchedDoctor?.uid || matchedDoctor?.id || '',
         specialization: matchedDoctor?.specialization || 'General'
       }));
-      setStep(4);
+      setStep(5);
       speak(`You selected doctor ${matchedDoctor?.name || text}. What is your preferred time and date?`, () => {
         if (listenRef.current) listenRef.current();
       });
     }
-    else if (currentStep === 4) {
-      // Step 4: Captured Time/Date, Proceed to booking
+    else if (currentStep === 5) {
+      // Step 5: Captured Time/Date, Proceed to booking
       setCapturedData(prev => ({ ...prev, timeDate: text }));
-      setStep(5);
+      setStep(6);
 
       speak("Confirming your booking and generating your token number. Please wait a moment.");
       await submitBooking(text, { ...currentData, timeDate: text });
@@ -242,7 +254,7 @@ export default function VoiceTriage() {
       // but the API handles patientProblem as the description field.
       formData.append("patientProblem", `Voice booking for ${timeDateStr}. Gender: ${currentData.gender}`);
       formData.append("age", currentData.age || '30');
-      formData.append("phone", "Voice-System-Booking"); // Matches schema expectation for a phone field
+      formData.append("phone", currentData.phone || 'Voice-System-Booking'); 
       formData.append("doctorName", `Dr. ${currentData.doctorName.replace(/^Dr\.\s*/i, '')}`);
       formData.append("doctorId", currentData.doctorId);
       formData.append("specialization", currentData.specialization);
@@ -314,7 +326,7 @@ export default function VoiceTriage() {
             </button>
 
             <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 transition-all ${isListening ? 'bg-blue-100 text-[#007BFF] animate-pulse' : 'bg-gray-100 text-gray-400'}`}>
-              {step === 5 ? <Loader2 className="w-10 h-10 animate-spin text-[#007BFF]" /> :
+              {step === 6 ? <Loader2 className="w-10 h-10 animate-spin text-[#007BFF]" /> :
                 isListening ? <Mic className="w-10 h-10" /> : <MicOff className="w-10 h-10" />}
             </div>
 
@@ -322,9 +334,10 @@ export default function VoiceTriage() {
             <p className="text-gray-500 mb-8 min-h-[3rem] text-lg font-roboto">
               {step === 1 && "Listening for your name..."}
               {step === 2 && "Listening for your age and gender..."}
-              {step === 3 && "Listening for doctor preference..."}
-              {step === 4 && "Listening for preferred time/date..."}
-              {step === 5 && "Confirming booking..."}
+              {step === 3 && "Listening for your phone number..."}
+              {step === 4 && "Listening for doctor preference..."}
+              {step === 5 && "Listening for preferred time/date..."}
+              {step === 6 && "Confirming booking..."}
             </p>
 
             {transcript && (
