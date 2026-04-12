@@ -1,13 +1,13 @@
 MedQTrack
 
-PROBLEM
+PROBLEM-
 Healthcare isn’t failing because of lack of doctors — it’s failing because of lack of systems.
 Imagine walking into a government hospital OPD at 9 AM… and not knowing whether your turn will come at 10 AM… or 3 PM. Long queues. No transparency. Manual registers. Delayed admissions. Stock-outs of essential medicines. And for many patients — especially the elderly, disabled, or those unfamiliar with technology — even accessing the system itself becomes a challenge.
 
 That’s the problem we’re solving with MedQTrack — an integrated hospital operations management system.
 
 
-SOLUTION
+SOLUTION-
 MedQTrack combines AI, real-time systems, and multi-channel accessibility to:
 
 Enable smart appointment booking with automated voice triage
@@ -16,7 +16,7 @@ Equip doctors with AI-generated patient context before consultation
 Improve accessibility through voice and WhatsApp-based interactions
 Digitize hospital infrastructure like beds and inventory
 
-KEY FEATURES
+KEY FEATURES-
 AI-Powered Summarization
 AI analyzes patient reports to identify key symptoms and generates concise summaries
 Multi-Channel Booking (WhatsApp + Voice)
@@ -31,7 +31,7 @@ Smart Bed Allocation System
 Tracks real-time bed availability with equipment validation (oxygen, monitors, pumps)
 
 
-TECH STACK
+TECH STACK-
 
 Frontend:
 React 18 (TypeScript)
@@ -51,7 +51,7 @@ Speech-to-Text
 WhatsApp Cloud API
 
 
-SYSTEM FLOW
+SYSTEM FLOW-
 Patient books via text, WhatsApp, or voice
 System generates token, assigns queue, and estimates wait time
 Doctor views live queue with AI-generated summaries
@@ -61,7 +61,7 @@ Admin manages bed availability and equipment
 Users view hospitals and real-time available beds
 
 
-SETUP AND INSTALLATION
+SETUP AND INSTALLATION-
 # Clone the repository
 git clone https://github.com/your-username/medqtrack.git
 
