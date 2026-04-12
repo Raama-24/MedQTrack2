@@ -63,7 +63,7 @@ Users view hospitals and real-time available beds
 
 SETUP AND INSTALLATION-
 # Clone the repository
-git clone https://github.com/your-username/medqtrack.git
+git clone https://github.com/Raama-24/medqtrack.git
 
 # Install dependencies
 cd medqtrack
