@@ -120,10 +120,11 @@ const DoctorDashboard: React.FC = () => {
     );
   };
 
-  const getAccessibilityTag = (index: number) => {
-    if (index === 0) return "Deaf";
-    if (index === 1) return "Blind";
-    if (index === 3) return "Deaf";
+  const getAccessibilityTag = (patient: Booking) => {
+    const isVoice = patient.patientProblem?.toLowerCase().includes('voice booking') || patient.phone === 'Voice-System-Booking';
+    if (isVoice) {
+      return patient.token % 2 === 0 ? "Deaf" : "Blind";
+    }
     return "None";
   };
 
@@ -421,7 +422,7 @@ const DoctorDashboard: React.FC = () => {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Problem</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Age</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Accessibility</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">View Report</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Voice Triage</th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                       </tr>
@@ -429,7 +430,8 @@ const DoctorDashboard: React.FC = () => {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {queue.map((patient, index) => {
                         const estimatedWait = index * avgConsultTime;
-                        const tag = getAccessibilityTag(index);
+                        const tag = getAccessibilityTag(patient);
+                        const hasReport = patient.aiSummary && patient.aiSummary !== "No report provided." && !patient.aiSummary.includes("⚠️");
                         return (
                           <tr key={patient.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap font-bold text-blue-600">#{patient.token}</td>
@@ -447,10 +449,16 @@ const DoctorDashboard: React.FC = () => {
                               )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(patient.status)}`}>
-                                {getStatusIcon(patient.status)}
-                                {(patient.status || "pending").replace("_", " ").toUpperCase()}
-                              </span>
+                              {hasReport ? (
+                                <button
+                                  onClick={() => setSelectedSummary(patient.aiSummary!)}
+                                  className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-md hover:bg-indigo-100 transition-colors justify-center font-medium"
+                                >
+                                  <FileText className="w-3 h-3" /> View Report
+                                </button>
+                              ) : (
+                                <span className="text-gray-400 text-sm">Not Available</span>
+                              )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
                               <button
